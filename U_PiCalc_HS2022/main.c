@@ -31,7 +31,7 @@
 
 #include "ButtonHandler.h"
 
-//Funktions deklaration
+//Function declaration
 void vControllerTask(void* pvParameters);
 void vDisplayTask(void* pvParameters);
 void vLeibnizTask(void* pvParameters);
@@ -47,19 +47,19 @@ TaskHandle_t	zeit;
 
 //EventGroup for ButtonEvents.
 EventGroupHandle_t egEventBits = NULL;
-#define STARTSTOPP	0x01				// Button1_Short
-#define RESET_SHORT	0x02				// BUTTON1_LONG
-#define PI_COLLECT	0x04				// BUTTON2_SHORT ; Bit für Pausieren berechnen damit Daten sicher für Anzeige abgegriffen werden können
-#define PI_EVEN	0x08					// BUTTON2_LONG
-#define BREAK	0x10					// BUTTON3_SHORT
-#define BUTTON3_LONG	0x20
-#define ALGORITHMUS	0x40				// BUTTON4_SHORT
-#define BUTTON4_LONG	0x80
+#define STARTSTOPP		0x01				// Button1_Short
+#define RESET_SHORT		0x02				// BUTTON1_LONG
+#define PI_COLLECT		0x04				// BUTTON2_SHORT ; Bit für Pausieren berechnen damit Daten sicher für Anzeige abgegriffen werden können
+#define PI_EVEN			0x08				// BUTTON2_LONG
+#define BREAK			0x10				// BUTTON3_SHORT
+//#define BUTTON3_LONG	0x20
+#define ALGORITHMUS		0x40				// BUTTON4_SHORT
+//#define BUTTON4_LONG	0x80
 #define BUTTON_ALL		0xFF
 
 float pi = 1;																											// Startwert für Leibnizberechnung
 uint32_t dauer = 0;
-//uint32_t n = 3;																											// Nenner Leibnizzahl startwert; unsigned int 32Bit
+
 
 
 int main(void) {
@@ -77,7 +77,7 @@ int main(void) {
 	vDisplayWriteStringAtPos(1,0,"Pascal Iten");											//
 	vDisplayWriteStringAtPos(2,0,"           ");											//
 	vDisplayWriteStringAtPos(3,0,"start| <= | <= | <= ");									//
-	//vTaskDelay(10);
+	//vTaskDelay(10);																		// nicht Nötig, da Display schreibTask nur schreibt, wenn Freigabe von Berechnung Task, un hier nochnicht gestartet
 	vTaskStartScheduler();
 	return 0;
 }
@@ -89,7 +89,7 @@ void vControllerTask(void* pvParameters) {
 		//vDisplayClear();																	// aktuell auskommentiert, da dazwischenfunken mit der Anzeige
 		updateButtons();
 		if(getButtonPress(BUTTON1) == SHORT_PRESSED) {										// Start
-			xEventGroupSetBits(egEventBits, STARTSTOPP);									// setzt Eventbitt auf 1 = start Rechnen
+			xEventGroupSetBits(egEventBits, STARTSTOPP);									// setzt Eventbit auf 1 = start Rechnen
 			xEventGroupClearBits(egEventBits, PI_EVEN);		
 			vTaskResume(zeit);
 		}
@@ -165,7 +165,7 @@ void vDisplayTask(void* pvParameters) {
 			vDisplayWriteStringAtPos(3,0, "strt|stp|reset|swtch");							// Start | Stopp | Reset | Switch
 			xEventGroupSetBits(egEventBits, BREAK);											// 
 			xEventGroupClearBits(egEventBits, PI_COLLECT);									//
-			vTaskDelay(200);	
+			vTaskDelay(500);	
 			//vTaskDelay(100/portTICK_RATE_MS);
 	}
 }
@@ -173,9 +173,9 @@ void vDisplayTask(void* pvParameters) {
 void vLeibnizTask(void* pvParameters) {														// Berechnung Pi/4
 	//vTaskSuspend(leibniz);																// initial state of vWallisschesTask Task shall be off	
 	float piHilfe = 1;
-	uint32_t n = 3;	
+	uint32_t n = 3;																			// Nenner Leibnizzahl startwert; unsigned int 32Bit
 	long vergleich = 0;
-	long pi5Stellen = 314159;
+	const long pi5Stellen = 314159;
 	xEventGroupSetBits(egEventBits, ALGORITHMUS);											// Anfangs setzen, da dieser Anfangs nicht suspendet ist, damit richiges Angezeigt wird
 	for(;;) {
 		if (xEventGroupGetBits(egEventBits) & RESET_SHORT) {
@@ -209,7 +209,7 @@ void vWallisschesTask(void* pvParameters) {													// https://matheguru.com
 	float piHilfe = 2;																		// Hilfvariable zum Rechnen
 	float piSave = 1;																		// Hilfsvariable zum Rechnen
 	long vergleich = 0;																		// Pi in int mit gewünschter Genauigkeit mit 5 Nachkommastellen wandeln
-	long pi5Stellen = 314159;																// pi zum Vergleichen
+	const long pi5Stellen = 314159;																// pi zum Vergleichen
 	for(;;) {
 		if (xEventGroupGetBits(egEventBits) & RESET_SHORT) {								// Wenn Resettaste gedrückt wurde ...
 			piHilfe = 2;																	// Rücksetzen
@@ -288,34 +288,3 @@ void vWallisschesTask(void* pvParameters) {													// https://matheguru.com
  	}
 }	
 	
-
-
-
-
-/*
-void vTimeTask(void* pvParameters) {			// PI = 3.14159 2653589793
-	for(;;) {
-		vTaskDelay(100 / portTICK_RATE_MS);
-	}
-}*/
-
-
-/*
-if(xEventGroupGetBits(egEventBits) & BUTTON2_SHORT) {
-*/
-
-/*
-			eTaskState state = eTaskGetState(blinkTask1Handle);
-			if(state == eSuspended) {
-				vTaskResume(blinkTask1Handle);
-			} else {
-				vTaskSuspend(blinkTask1Handle);
-			}
-			*/
-
-/*
-	vTaskSuspend(loadkillTaskHandle); //initial state of loadkill Task shall be off
-*/
-
-
-// vTaskDelayUntil		unabhängig von der Last des Tasks immer gleich lange warten lassen
