@@ -32,16 +32,16 @@
 #include "ButtonHandler.h"
 
 //Function declaration
-void vControllerTask(void* pvParameters);
+void vControllerTask(void* pvParameters);	// Prototypen der Funktionstasks vor main
 void vDisplayTask(void* pvParameters);
 void vLeibnizTask(void* pvParameters);
 void vWallisschesTask(void* pvParameters);
 void vZeitTask(void* pvParameters);
 
-TaskHandle_t	control;
-TaskHandle_t	display;
-TaskHandle_t	leibniz;
-TaskHandle_t	wallis;
+//TaskHandle_t	control;					
+//TaskHandle_t	display;
+TaskHandle_t	leibniz;					// Für die Steuerung der Tasks da, zB. zum Suspenden oder Resumen
+TaskHandle_t	wallis;						// Für die Steuerung der Tasks da, zB. zum Suspenden oder Resumen
 TaskHandle_t	zeit;
 
 
@@ -57,8 +57,8 @@ EventGroupHandle_t egEventBits = NULL;
 //#define BUTTON4_LONG	0x80
 #define BUTTON_ALL		0xFF
 
-float pi = 1;																											// Startwert für Leibnizberechnung
-uint32_t dauer = 0;
+float pi = 1;								// Startwert für Leibnizberechnung
+uint32_t dauer = 0;							// Variable für Zeitberechnung von Start PI Berechnung bis gefunden
 
 
 
@@ -66,54 +66,47 @@ int main(void) {
 	vInitClock();
 	vInitDisplay();
 	
-	xTaskCreate(vControllerTask, (const char *) "control_tsk", configMINIMAL_STACK_SIZE+150, NULL, 3, &control);		// höchste Prio da Tastenerkennung wichtig
-	xTaskCreate(vDisplayTask, (const char *) "display_tsk", configMINIMAL_STACK_SIZE+100, NULL, 2, &display);			// Prio 1 da wenig kritisch
-	xTaskCreate(vLeibnizTask, (const char *) "leibniz_tsk", configMINIMAL_STACK_SIZE, NULL, 1, &leibniz);			// Prio 1,
-	xTaskCreate(vWallisschesTask, (const char *) "wallis_tsk", configMINIMAL_STACK_SIZE, NULL, 1, &wallis);			//
-	xTaskCreate(vZeitTask, (const char *) "zeit_tsk", configMINIMAL_STACK_SIZE, NULL, 2, &zeit);					//
+	xTaskCreate(vControllerTask, (const char *) "control_tsk", configMINIMAL_STACK_SIZE+150, NULL, 3, NULL);			// höchste Prio da Tastenerkennung wichtig
+	xTaskCreate(vDisplayTask, (const char *) "display_tsk", configMINIMAL_STACK_SIZE+100, NULL, 2, NULL);				// Anzeige weniger Kritisch, aber hat mehr priorität als die Berechnenden Tasks
+	xTaskCreate(vLeibnizTask, (const char *) "leibniz_tsk", configMINIMAL_STACK_SIZE, NULL, 1, &leibniz);				// Prio 1 da wenig kritisch
+	xTaskCreate(vWallisschesTask, (const char *) "wallis_tsk", configMINIMAL_STACK_SIZE, NULL, 1, &wallis);				// Prio 1 da wenig kritisch
+	xTaskCreate(vZeitTask, (const char *) "zeit_tsk", configMINIMAL_STACK_SIZE, NULL, 2, &zeit);						// 2. höchste Prio, da Zeitkritisch
 	
 	vDisplayClear();
 	vDisplayWriteStringAtPos(0,0,"PI-Calc ET-2009 ES");
-	vDisplayWriteStringAtPos(1,0,"Pascal Iten");											//
-	vDisplayWriteStringAtPos(2,0,"           ");											//
-	vDisplayWriteStringAtPos(3,0,"start| <= | <= | <= ");									//
-	//vTaskDelay(10);																		// nicht Nötig, da Display schreibTask nur schreibt, wenn Freigabe von Berechnung Task, un hier nochnicht gestartet
-	vTaskStartScheduler();
+	vDisplayWriteStringAtPos(1,0,"Pascal Iten");											
+	vDisplayWriteStringAtPos(2,0,"           ");											
+	vDisplayWriteStringAtPos(3,0,"start| <= | <= | <= ");									
+	//vTaskDelay(10);																		// nicht Nötig, da Display schreibTask nur schreibt, wenn Freigabe von Berechnung Task, und hier noch nicht gestartet
+	vTaskStartScheduler();																	// Scheduler starten für Task bearbeitungen durch diesen
 	return 0;
 }
 
 void vControllerTask(void* pvParameters) {
 	egEventBits = xEventGroupCreate();
-	initButtons(); //Initialize Buttons
+	initButtons();																			//Initialize Buttons
 	for(;;) {
-		//vDisplayClear();																	// aktuell auskommentiert, da dazwischenfunken mit der Anzeige
-		updateButtons();
-		if(getButtonPress(BUTTON1) == SHORT_PRESSED) {										// Start
+		updateButtons();																	
+		if(getButtonPress(BUTTON1) == SHORT_PRESSED) {									// Start
 			xEventGroupSetBits(egEventBits, STARTSTOPP);									// setzt Eventbit auf 1 = start Rechnen
-			xEventGroupClearBits(egEventBits, PI_EVEN);		
+			xEventGroupClearBits(egEventBits, PI_EVEN);										// Rücksetzen Bit für überprüfung ob PI Berechnung gleich Pi Vorgabe
 			vTaskResume(zeit);
 		}
-		if(getButtonPress(BUTTON2) == SHORT_PRESSED) {										// Stopp - Unterbrechen
+		if(getButtonPress(BUTTON2) == SHORT_PRESSED) {									// Stopp - Unterbrechen
 			xEventGroupClearBits(egEventBits, STARTSTOPP);									// setzt Eventbitt wieder auf 0 = blockieren Rechnen
-			//vTaskSuspend(zeit);
 		}
-		if(getButtonPress(BUTTON3) == SHORT_PRESSED) {										// Reset der Berechnung der Zahl Pi
-			pi = 1;
-
-			//xEventGroupSetBits(egEventBits, STARTSTOPP);
+		if(getButtonPress(BUTTON3) == SHORT_PRESSED) {									// Reset der Berechnung der Zahl Pi
+			pi = 1;																			// Startwert Pi wieder auf 1 setzen
 			xEventGroupSetBits(egEventBits, RESET_SHORT);
 			xEventGroupClearBits(egEventBits, PI_EVEN);			
 			dauer = 0;																		// dauer wieder reseten auf 0
 			vTaskResume(zeit);
-			
 		}
-		if(getButtonPress(BUTTON4) == SHORT_PRESSED) {										// Switch - Wechsel der Algorithmen durch Suspend setzen des jeweilig anderen
-			//xEventGroupSetBits(egEventBits, BUTTON4_SHORT);
-			
+		if(getButtonPress(BUTTON4) == SHORT_PRESSED) {									// Switch - Wechsel der Algorithmen durch Suspend setzen des jeweilig anderen
 			xEventGroupSetBits(egEventBits, RESET_SHORT);									// Macht das bei einem Wechsel auch wieder von vorne angefange wird zu zählen
 			xEventGroupClearBits(egEventBits, PI_EVEN);	
 			eTaskState state = eTaskGetState(leibniz);										// Wechseln zwischen den Berechnung Tasks
-			if(state == eSuspended) {	
+			if(state == eSuspended) {														
 				vTaskSuspend(wallis);
 				vTaskResume(leibniz);	
 			} else {
@@ -122,22 +115,19 @@ void vControllerTask(void* pvParameters) {
 			}
 			dauer = 0;																		// dauer wieder reseten auf 0
 			vTaskResume(zeit);
-		}
+		}/*
 		if(getButtonPress(BUTTON1) == LONG_PRESSED) {
-			//xEventGroupSetBits(egEventBits, BUTTON1_LONG);
+			xEventGroupSetBits(egEventBits, BUTTON1_LONG);
 		}
 		if(getButtonPress(BUTTON2) == LONG_PRESSED) {
-			//xEventGroupSetBits(egEventBits, BUTTON2_LONG);
+			xEventGroupSetBits(egEventBits, BUTTON2_LONG);
 		}
 		if(getButtonPress(BUTTON3) == LONG_PRESSED) {
-			//xEventGroupSetBits(egEventBits, BUTTON3_LONG);
+			xEventGroupSetBits(egEventBits, BUTTON3_LONG);
 		}
 		if(getButtonPress(BUTTON4) == LONG_PRESSED) {
-			//xEventGroupSetBits(egEventBits, BUTTON4_LONG);
-			//char pistring[12];
-			//sprintf(&pistring[0], "PI: %.8f", M_PI);
-			//vDisplayWriteStringAtPos(1,0, "%s", pistring);
-		}
+			xEventGroupSetBits(egEventBits, BUTTON4_LONG);
+		}*/
 		//vTaskDelay(10/portTICK_RATE_MS);
 		vTaskDelay(10);																		// alle 10ms abfragen
 	}
@@ -147,7 +137,7 @@ void vDisplayTask(void* pvParameters) {
 	char tempPi[12] = "";
 	char wahlAlgo[15] = "";
 	for (;;) {
-		xEventGroupClearBits(egEventBits, BREAK);											// legt das Stoppbit kurzzeitig
+		xEventGroupClearBits(egEventBits, BREAK);											// setzte das Pausenbit zurück, für signalisation für Datenabholung
 		xEventGroupWaitBits(egEventBits, PI_COLLECT, false, true, portMAX_DELAY);			// Bestätigung von Algorithmus Tasks das Pause
 		if (xEventGroupGetBits(egEventBits) & ALGORITHMUS) {
 			sprintf(wahlAlgo,"%.12s","Leibniz");
@@ -155,17 +145,14 @@ void vDisplayTask(void* pvParameters) {
 			sprintf(wahlAlgo,"%.12s","Wallissche");
 		}
 			sprintf(tempPi,"%.7f",pi);														// Datenabholung muss berechnung stoppen, abholen, weiterlaufen
-// 			if (xEventGroupGetBits(egEventBits) & RESET_SHORT) {
-// 				printf(tempPi,"2BStarted");
-// 			}
+			xEventGroupClearBits(egEventBits, PI_COLLECT);									// Bit zurücksetzen wegen abholung PI damit Pause
 			vDisplayClear();																// clear Display vor neuschreiben
-			vDisplayWriteStringAtPos(0,0,"Modus: %s", wahlAlgo);							// Leibniz / Wallissches
-			vDisplayWriteStringAtPos(1,0,"Zeit bis Pi: %ds", dauer/1000);
-			vDisplayWriteStringAtPos(2,0, "PI: %s", tempPi);								//
+			vDisplayWriteStringAtPos(0,0,"Modus: %s", wahlAlgo);							// Leibniz / Wallissches Modus
+			vDisplayWriteStringAtPos(1,0,"Zeit bis Pi: %ds", dauer/1000);					// Berechnung Zeit PI, 1kHz Ticks
+			vDisplayWriteStringAtPos(2,0, "PI: %s", tempPi);								// Feld fpr Anzeige aktueller Pi Wert
 			vDisplayWriteStringAtPos(3,0, "strt|stp|reset|swtch");							// Start | Stopp | Reset | Switch
-			xEventGroupSetBits(egEventBits, BREAK);											// 
-			xEventGroupClearBits(egEventBits, PI_COLLECT);									//
-			vTaskDelay(500);	
+			xEventGroupSetBits(egEventBits, BREAK);											// setzen des Pausenbits
+			vTaskDelay(500);																// Warten ~500ms bis wieder Anzeige Updaten 
 			//vTaskDelay(100/portTICK_RATE_MS);
 	}
 }
@@ -175,31 +162,31 @@ void vLeibnizTask(void* pvParameters) {														// Berechnung Pi/4
 	float piHilfe = 1;
 	uint32_t n = 3;																			// Nenner Leibnizzahl startwert; unsigned int 32Bit
 	long vergleich = 0;
-	const long pi5Stellen = 314159;
+	const long pi5Stellen = 314159;															// Variable für zum vergleichen
 	xEventGroupSetBits(egEventBits, ALGORITHMUS);											// Anfangs setzen, da dieser Anfangs nicht suspendet ist, damit richiges Angezeigt wird
 	for(;;) {
-		if (xEventGroupGetBits(egEventBits) & RESET_SHORT) {
+		if (xEventGroupGetBits(egEventBits) & RESET_SHORT) {								// Rücksetzaufgabe
 			piHilfe =1; 
 			n = 3;
 			xEventGroupSetBits(egEventBits, ALGORITHMUS);									// in der Resetfunktion, damit nicht jeder Durchlauf gesetzt wird
 			xEventGroupClearBits(egEventBits, 0x03);										// Bits STARTSTOPP & RESET_SHORT Clearen
-			xEventGroupSetBits(egEventBits, PI_COLLECT);
 			pi = 1;
+			xEventGroupSetBits(egEventBits, PI_COLLECT);
 		}
 		if(xEventGroupGetBits(egEventBits) & STARTSTOPP) {
-			if(xEventGroupGetBits(egEventBits) & BREAK) {
+			if(xEventGroupGetBits(egEventBits) & BREAK) {									// wenn Pausenbit gesetzt dann rechnen erlaubt
 				piHilfe = piHilfe - (1.0/n);												// 1.0 nötig dass es float ist, bei nur 1 istes Int
 					n = n + 2;																// aufzählen da so Algorithmus funktioniert
 					piHilfe = piHilfe + (1.0/n);											
 					pi = piHilfe*4;															// Rundenwert an Pi weitergeben für darstellung
 					n = n + 2;
 			} else {
-			xEventGroupSetBits(egEventBits, PI_COLLECT);
+			xEventGroupSetBits(egEventBits, PI_COLLECT);									// Wenn nicht am Berechnen/Break gesetzt, Freigabe für Datenabholung and DisplayTask geben
 			} 
 		}
-		vergleich = pi * 100000;
+		vergleich = pi * 100000;															//damit die Nötigen Stellen ohne Komma nachfolgend verglichen werden können (long int schneidet nach Komma ab)
   		if (vergleich == pi5Stellen) {
-	  		xEventGroupSetBits(egEventBits,PI_EVEN);
+	  		xEventGroupSetBits(egEventBits,PI_EVEN);										// Bit setzen für übereinstimmung der Pi Werte
 		}
 	}
 }
@@ -216,10 +203,10 @@ void vWallisschesTask(void* pvParameters) {													// https://matheguru.com
 			piSave = 1;																		// Reücksetzen
 			xEventGroupClearBits(egEventBits, ALGORITHMUS);									// in der Resetfunktion, damit nicht jeder Durchlauf gesetzt wird
 			xEventGroupClearBits(egEventBits, 0x03);										// Bits STARTSTOPP & RESET_SHORT Clearen
-			xEventGroupSetBits(egEventBits, PI_COLLECT);									// Lesen beim Displaytask erlauben
 			pi = 1;
+			xEventGroupSetBits(egEventBits, PI_COLLECT);									// Lesen beim Displaytask erlauben
 		}
-		if(xEventGroupGetBits(egEventBits) & STARTSTOPP) {
+		if(xEventGroupGetBits(egEventBits) & STARTSTOPP) {									
 			if(xEventGroupGetBits(egEventBits) & BREAK) {
 				piSave = piSave*(piHilfe/(piHilfe - 1));
 				piSave = piSave*(piHilfe/(piHilfe + 1));
@@ -236,54 +223,52 @@ void vWallisschesTask(void* pvParameters) {													// https://matheguru.com
 	}
 }
 
- void vZeitTask(void* pvParameters) {															// 
-  	TickType_t xLastWakeTime;
+ void vZeitTask(void* pvParameters) {															// Task für Berechnung der Zeit bis Pi errreicht wurde
+  	TickType_t xLastWakeTime;																	// Nötig für vTaskDelayUntil damit auf den gewünschten Zeitpunkt wieder Task gestartet wird
   	const TickType_t xFrequency = 10;
   	xLastWakeTime = xTaskGetTickCount();
- 	uint32_t start = 0;					// unsigned volatile
+ 	uint32_t start = 0;																			// Rechen Variablen für Zeit von Anfang bis Pi Erreicht
  	uint32_t stop = 0;
-	uint32_t pause = 0;
+	uint32_t pause = 0;																			// Für wenn Stop gedrück wird dass diese Zeit abgezogen werden kann.
 	uint32_t pauseKlein = 0;
 	uint32_t pauseGross = 0;
 	int hilfe = 0;
- 
   	for (;;) {
-  		vTaskDelayUntil(&xLastWakeTime, xFrequency);
-		//xEventGroupWaitBits(egEventBits, STARTSTOPP, false, true, portMAX_DELAY);				// 
- 		if (start == 0) {
-			xEventGroupWaitBits(egEventBits, STARTSTOPP, false, true, portMAX_DELAY);			// 
- 			start = xTaskGetTickCountFromISR();
+  		vTaskDelayUntil(&xLastWakeTime, xFrequency);											// Task Pausieren bis gewünschte Zeit abgelaufen
+		  dauer = 0;
+ 		if (start == 0) {																		// Wenn Berechnung wieder geresetet wurde, damit nur beim ersten Durchgang dieser Wert geschrieben wird
+			xEventGroupWaitBits(egEventBits, STARTSTOPP, false, true, portMAX_DELAY);			// aufs StartBit warten
+ 			start = xTaskGetTickCountFromISR();													// aktueller Tickwert nehmen
 		}
-		if ((xEventGroupGetBits(egEventBits) & STARTSTOPP) != 1) {
-			if (pauseKlein == 0) {
-				pauseKlein = xTaskGetTickCountFromISR();
-				hilfe = 1;
+		if ((xEventGroupGetBits(egEventBits) & STARTSTOPP) != 1) {								// Wenn Stop gedrückt wurden
+			if (pauseKlein == 0) {																// Wenn Berechnung wieder geresetet wurde, damit nur bei der ersten Pause dieser Wert geschrieben wird
+				pauseKlein = xTaskGetTickCountFromISR();										// aktueller Tickwert nehmen
+				hilfe = 1;																		
 			}
 		}
-		if (hilfe == 1) {
-			if ((xEventGroupGetBits(egEventBits) & STARTSTOPP)) {
-				if (pauseGross == 0) {
-					pauseGross = xTaskGetTickCountFromISR();
-					pause = pauseGross - pauseKlein + pause;
-					hilfe = 0;
-					pauseKlein = 0;
-					pauseGross = 0;
-				}
+		if (hilfe == 1) {																		// damit erst aufgerufen wenn der erste Wert der Pause aufgezeichnet wurde
+			if ((xEventGroupGetBits(egEventBits) & STARTSTOPP)) {								// wenn wieder Start gedrückt wurde		
+				pauseGross = xTaskGetTickCountFromISR();
+				pause = pauseGross - pauseKlein + pause;										// Aufsumieren
+				hilfe = 0;
+				pauseKlein = 0;
+				pauseGross = 0;
 			}
 		}
- 		stop = xTaskGetTickCountFromISR();
-		if (xEventGroupGetBits(egEventBits) & PI_EVEN) {
+ 		stop = xTaskGetTickCountFromISR();														// aktueller Wert zum Vergleich
+		dauer = stop - start - pause;															// Wert schreiben
+		if (xEventGroupGetBits(egEventBits) & PI_EVEN) {										// Rücksetzen wenn Pi erreicht und dann Task Suspenden
 			start = 0;
 			stop = 0;
 			pause = 0;
 			vTaskSuspend(zeit);
-		} else if (xEventGroupGetBits(egEventBits) & RESET_SHORT) {
+		} else if (xEventGroupGetBits(egEventBits) & RESET_SHORT) {								// Wenn Reset gedrückt wurde Rücksetzen und Suspenden
 			start = 0;
 			stop = 0;
 			pause = 0;
 			vTaskSuspend(zeit);
 		} else {
-			dauer = stop - start - pause;
+			
 		}			
  	}
 }	
