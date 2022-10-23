@@ -48,7 +48,7 @@ TaskHandle_t	zeit;
 //EventGroup for ButtonEvents.
 EventGroupHandle_t egEventBits = NULL;
 #define STARTSTOPP		0x01				// Button1_Short
-#define RESET_SHORT		0x02				// BUTTON1_LONG
+#define RESET			0x02				// BUTTON1_LONG
 #define PI_COLLECT		0x04				// BUTTON2_SHORT ; Bit für Pausieren berechnen damit Daten sicher für Anzeige abgegriffen werden können
 #define PI_EVEN			0x08				// BUTTON2_LONG
 #define BREAK			0x10				// BUTTON3_SHORT
@@ -97,13 +97,13 @@ void vControllerTask(void* pvParameters) {
 		}
 		if(getButtonPress(BUTTON3) == SHORT_PRESSED) {									// Reset der Berechnung der Zahl Pi
 			pi = 1;																			// Startwert Pi wieder auf 1 setzen
-			xEventGroupSetBits(egEventBits, RESET_SHORT);
+			xEventGroupSetBits(egEventBits, RESET);
 			xEventGroupClearBits(egEventBits, PI_EVEN);			
 			dauer = 0;																		// dauer wieder reseten auf 0
 			vTaskResume(zeit);
 		}
 		if(getButtonPress(BUTTON4) == SHORT_PRESSED) {									// Switch - Wechsel der Algorithmen durch Suspend setzen des jeweilig anderen
-			xEventGroupSetBits(egEventBits, RESET_SHORT);									// Macht das bei einem Wechsel auch wieder von vorne angefange wird zu zählen
+			xEventGroupSetBits(egEventBits, RESET);											// Macht das bei einem Wechsel auch wieder von vorne angefange wird zu zählen
 			xEventGroupClearBits(egEventBits, PI_EVEN);	
 			eTaskState state = eTaskGetState(leibniz);										// Wechseln zwischen den Berechnung Tasks
 			if(state == eSuspended) {														
@@ -152,29 +152,34 @@ void vLeibnizTask(void* pvParameters) {														// Berechnung Pi/4
 	const long pi5Stellen = 314159;															// Variable für zum vergleichen
 	xEventGroupSetBits(egEventBits, ALGORITHMUS);											// Anfangs setzen, da dieser Anfangs nicht suspendet ist, damit richiges Angezeigt wird
 	for(;;) {
-		if (xEventGroupGetBits(egEventBits) & RESET_SHORT) {								// Rücksetzaufgabe
+		if (xEventGroupGetBits(egEventBits) & RESET) {										// Rücksetzaufgabe
 			piHilfe =1; 
 			n = 3;
 			xEventGroupSetBits(egEventBits, ALGORITHMUS);									// in der Resetfunktion, damit nicht jeder Durchlauf gesetzt wird
-			xEventGroupClearBits(egEventBits, 0x03);										// Bits STARTSTOPP & RESET_SHORT Clearen
+			xEventGroupClearBits(egEventBits, 0x03);										// Bits STARTSTOPP & RESET Clearen
 			pi = 1;
 			xEventGroupSetBits(egEventBits, PI_COLLECT);
 		}
 		if(xEventGroupGetBits(egEventBits) & STARTSTOPP) {
 			if(xEventGroupGetBits(egEventBits) & BREAK) {									// wenn Pausenbit gesetzt dann rechnen erlaubt
 				piHilfe = piHilfe - (1.0/n);												// 1.0 nötig dass es float ist, bei nur 1 istes Int
-				n = n + 2;																// aufzählen da so Algorithmus funktioniert
+				n = n + 2;																	// aufzählen da so Algorithmus funktioniert
+				pi = piHilfe*4;	
+				vergleich = pi * 100000;													//damit die Nötigen Stellen ohne Komma nachfolgend verglichen werden können (long int schneidet nach Komma ab)
+				if (vergleich == pi5Stellen) {
+					xEventGroupSetBits(egEventBits,PI_EVEN);								// Bit setzen für übereinstimmung der Pi Werte
+				}
 				piHilfe = piHilfe + (1.0/n);											
-				pi = piHilfe*4;															// Rundenwert an Pi weitergeben für darstellung
+				//pi = piHilfe*4;															// Rundenwert an Pi weitergeben für darstellung
 				n = n + 2;
 			} else {
 			xEventGroupSetBits(egEventBits, PI_COLLECT);									// Wenn nicht am Berechnen/Break gesetzt, Freigabe für Datenabholung and DisplayTask geben
 			} 
 		}
-		vergleich = pi * 100000;															//damit die Nötigen Stellen ohne Komma nachfolgend verglichen werden können (long int schneidet nach Komma ab)
-  		if (vergleich == pi5Stellen) {
-	  		xEventGroupSetBits(egEventBits,PI_EVEN);										// Bit setzen für übereinstimmung der Pi Werte
-		}
+// 		vergleich = pi * 100000;																//damit die Nötigen Stellen ohne Komma nachfolgend verglichen werden können (long int schneidet nach Komma ab)
+//   		if (vergleich == pi5Stellen) {
+// 	  		xEventGroupSetBits(egEventBits,PI_EVEN);											// Bit setzen für übereinstimmung der Pi Werte
+// 		}
 	}
 }
 
@@ -185,11 +190,11 @@ void vWallisschesTask(void* pvParameters) {													// https://matheguru.com
 	long vergleich = 0;																		// Pi in int mit gewünschter Genauigkeit mit 5 Nachkommastellen wandeln
 	const long pi5Stellen = 314159;																// pi zum Vergleichen
 	for(;;) {
-		if (xEventGroupGetBits(egEventBits) & RESET_SHORT) {								// Wenn Resettaste gedrückt wurde ...
+		if (xEventGroupGetBits(egEventBits) & RESET) {										// Wenn Resettaste gedrückt wurde ...
 			piHilfe = 2;																	// Rücksetzen
 			piSave = 1;																		// Reücksetzen
 			xEventGroupClearBits(egEventBits, ALGORITHMUS);									// in der Resetfunktion, damit nicht jeder Durchlauf gesetzt wird
-			xEventGroupClearBits(egEventBits, 0x03);										// Bits STARTSTOPP & RESET_SHORT Clearen
+			xEventGroupClearBits(egEventBits, 0x03);										// Bits STARTSTOPP & RESET Clearen
 			pi = 1;
 			xEventGroupSetBits(egEventBits, PI_COLLECT);									// Lesen beim Displaytask erlauben
 		}
@@ -225,25 +230,25 @@ void vWallisschesTask(void* pvParameters) {													// https://matheguru.com
 			dauer = 0;
  		if (start == 0) {																		// Wenn Berechnung wieder geresetet wurde, damit nur beim ersten Durchgang dieser Wert geschrieben wird
 			xEventGroupWaitBits(egEventBits, STARTSTOPP, false, true, portMAX_DELAY);			// aufs StartBit warten
- 			start = xTaskGetTickCountFromISR();													// aktueller Tickwert nehmen
+ 			start = xTaskGetTickCount();													// aktueller Tickwert nehmen
 			pause = 0;
 		}
 		if ((xEventGroupGetBits(egEventBits) & STARTSTOPP) != 1) {								// Wenn Stop gedrückt wurden
 			if (pauseKlein == 0) {																// Wenn Berechnung wieder geresetet wurde, damit nur bei der ersten Pause dieser Wert geschrieben wird
-				pauseKlein = xTaskGetTickCountFromISR();										// aktueller Tickwert nehmen
+				pauseKlein = xTaskGetTickCount();										// aktueller Tickwert nehmen
 				hilfe = 1;																		
 			}
 		}
 		if (hilfe == 1) {																		// damit erst aufgerufen wenn der erste Wert der Pause aufgezeichnet wurde
 			if ((xEventGroupGetBits(egEventBits) & STARTSTOPP)) {								// wenn wieder Start gedrückt wurde		
-				pauseGross = xTaskGetTickCountFromISR();
+				pauseGross = xTaskGetTickCount();
 				pause = pauseGross - pauseKlein + pause;										// Aufsumieren
 				hilfe = 0;
 				pauseKlein = 0;
 				pauseGross = 0;
 			}
 		}
- 		stop = xTaskGetTickCountFromISR();														// aktueller Wert zum Vergleich
+ 		stop = xTaskGetTickCount();														// aktueller Wert zum Vergleich
 		dauer = stop - start - pause;															// Wert schreiben
 		if (xEventGroupGetBits(egEventBits) & PI_EVEN) {										// Rücksetzen wenn Pi erreicht und dann Task Suspenden
 			start = 0;
@@ -252,7 +257,7 @@ void vWallisschesTask(void* pvParameters) {													// https://matheguru.com
 			pauseKlein = 0;
 			pauseGross = 0;
 			vTaskSuspend(zeit);
-		} else if (xEventGroupGetBits(egEventBits) & RESET_SHORT) {								// Wenn Reset gedrückt wurde Rücksetzen und Suspenden
+		} else if (xEventGroupGetBits(egEventBits) & RESET) {									// Wenn Reset gedrückt wurde Rücksetzen und Suspenden
 			start = 0;
 			stop = 0;
 			pause = 0;
